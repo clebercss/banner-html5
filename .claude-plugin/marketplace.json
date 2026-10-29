@@ -1,0 +1,13 @@
+{
+  "name": "banners-html5",
+  "owner": { "name": "Cleber" },
+  "description": "Plugins para produção de banners HTML5 animados.",
+  "plugins": [
+    {
+      "name": "banner-html5",
+      "source": "./plugins/banner-html5",
+      "description": "Banners HTML5 animados a partir do Figma: template, timeline compartilhada, validação de peso/duração e subagente de adaptação de formatos.",
+      "version": "1.0.0"
+    }
+  ]
+}

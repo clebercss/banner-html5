@@ -1,0 +1,46 @@
+/* base.css — reset, easings e biblioteca de animações. IDÊNTICO em todos os formatos.
+   Posições ficam em layout.css (left/top/width). transform/opacity são reservados às animações. */
+:root {
+  --ease-linear: linear;
+  --ease-in: cubic-bezier(.55, 0, 1, .45);
+  --ease-out: cubic-bezier(0, .55, .45, 1);
+  --ease-inout: cubic-bezier(.65, 0, .35, 1);
+  --ease-back: cubic-bezier(.34, 1.56, .64, 1);
+  --dist: 40px;    /* deslocamento das entradas/saídas — ajustar por formato em layout.css */
+  --zoom: 1.15;    /* escala de zoom-in e ken-burns */
+  --pulso: 1.06;   /* escala máxima do pulso */
+  --borda: #cccccc;
+  --fundo: #ffffff;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: var(--w); height: var(--h); overflow: hidden; background: var(--fundo); }
+.banner { position: relative; width: var(--w); height: var(--h); overflow: hidden; cursor: pointer; visibility: hidden; }
+.banner.pronto { visibility: visible; }
+.banner::after { content: ''; position: absolute; inset: 0; border: 1px solid var(--borda); pointer-events: none; z-index: 99; }
+.el { position: absolute; display: block; max-width: none; }
+
+/* ===== Entradas ===== */
+@keyframes fade-in      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes entra-esq    { from { opacity: 0; transform: translateX(calc(-1 * var(--dist))); } to { opacity: 1; transform: none; } }
+@keyframes entra-dir    { from { opacity: 0; transform: translateX(var(--dist)); } to { opacity: 1; transform: none; } }
+@keyframes entra-cima   { from { opacity: 0; transform: translateY(calc(-1 * var(--dist))); } to { opacity: 1; transform: none; } }
+@keyframes entra-baixo  { from { opacity: 0; transform: translateY(var(--dist)); } to { opacity: 1; transform: none; } }
+@keyframes pop          { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: none; } }
+@keyframes zoom-in      { from { opacity: 0; transform: scale(var(--zoom)); } to { opacity: 1; transform: none; } }
+@keyframes zoom-out     { from { opacity: 0; transform: scale(.8); } to { opacity: 1; transform: none; } }
+@keyframes revela-esq   { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+@keyframes revela-baixo { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0); } }
+@keyframes gira-entra   { from { opacity: 0; transform: rotate(-90deg) scale(.5); } to { opacity: 1; transform: none; } }
+@keyframes ken-burns    { from { transform: scale(1); } to { transform: scale(var(--zoom)); } }
+
+/* ===== Saídas ===== */
+@keyframes fade-out     { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sai-esq      { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(calc(-1 * var(--dist))); } }
+@keyframes sai-dir      { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(var(--dist)); } }
+@keyframes sai-cima     { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(calc(-1 * var(--dist))); } }
+@keyframes sai-baixo    { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(var(--dist)); } }
+
+/* ===== Ênfase ===== */
+@keyframes pulso        { 0%, 100% { transform: none; } 50% { transform: scale(var(--pulso)); } }
+@keyframes tremor       { 0%, 100% { transform: none; } 20%, 60% { transform: translateX(-4px) rotate(-2deg); } 40%, 80% { transform: translateX(4px) rotate(2deg); } }

@@ -1,0 +1,10 @@
+/* {{W}}x{{H}} — único arquivo de código que muda por formato (junto com assets/).
+   Valores exatos do frame no Figma, em px. Use só left/top/width/height (transform é das animações).
+   omitir: */
+:root { --w: {{W}}px; --h: {{H}}px; --dist: 40px; }
+
+#bg     { left: 0px; top: 0px; width: {{W}}px; height: {{H}}px; }
+#f1-txt { left: 0px; top: 0px; width: 0px; }
+#f2-txt { left: 0px; top: 0px; width: 0px; }
+#logo   { left: 0px; top: 0px; width: 0px; }
+#cta    { left: 0px; top: 0px; width: 0px; }
