@@ -1,15 +1,17 @@
 # Timeline compartilhada + CSS variables
 
-## Arquitetura
+## Arquitetura (cada formato é independente)
 ```
 <campanha>/
-  _shared/index.html   elementos (1 por linha), {{W}}/{{H}} preenchidos pelo sync
-  _shared/base.css     reset + easings + keyframes (fixo, não ler)
-  _shared/timeline.js  bloco TIMELINE (editar) + motor (fixo)
-  <WxH>/layout.css     ÚNICO código por formato: --w, --h, --dist + left/top/width de cada id
-  <WxH>/assets/        mesmos nomes de arquivo em todos os formatos
+  index.html            preview: só os formatos prontos (gerado por `banner.py preview`)
+  secoes.txt            opcional: seções do preview ("GCOM: 970x250, 300x250")
+  <WxH>/index.html      elementos (1 por linha)
+  <WxH>/base.css        reset + easings + keyframes (fixo, não ler)
+  <WxH>/timeline.js     bloco TIMELINE (editar) + motor (fixo)
+  <WxH>/layout.css      --w, --h, --dist + left/top/width de cada id
+  <WxH>/assets/         imagens e SVGs deste formato
 ```
-`sync` gera `<WxH>/index.html` e copia `base.css` e `timeline.js`. Nunca edite esses arquivos dentro da pasta do formato.
+O master é construído primeiro. `clonar` copia `index.html`, `base.css` e `timeline.js` dele para cada formato (ajustando o tamanho e removendo os ids de `omitir:`), sem tocar em `layout.css` nem em `assets/`. Depois disso cada formato pode ser editado sozinho.
 
 ## Passo da timeline
 `{ t: 3.6, el: 'f2-txt', anim: 'entra-baixo', dur: 0.6, ease: 'out', rep: 1, loop: false }`
@@ -23,7 +25,7 @@
 - Saídas: `fade-out`, `sai-esq`, `sai-dir`, `sai-cima`, `sai-baixo`.
 - Ênfase: `pulso` (use com `rep`), `tremor`.
 - Variáveis por formato em layout.css: `--dist`, `--zoom`, `--pulso`, `--borda`, `--fundo`.
-- Animação nova: acrescente um `@keyframes` em `_shared/base.css` usando só transform, opacity ou clip-path. Se for uma entrada, o nome precisa começar com um dos prefixos de ENTRADA do motor.
+- Animação nova: acrescente um `@keyframes` no `base.css` do master (e rode `clonar`) usando só transform, opacity ou clip-path. Se for uma entrada, o nome precisa começar com um dos prefixos de ENTRADA do motor.
 
 ## Presets de mood (para sugerir no briefing)
 | Mood | Durações | Eases | Animações típicas | Frames |

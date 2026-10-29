@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """banner.py — utilitário da skill banner-html5. Saída curta de propósito (economia de tokens).
 
-  python banner.py novo     <campanha> <formatos|grupos...>  cria _shared/ e as pastas dos formatos
-  python banner.py sync     <campanha> [formatos...]         gera index.html e copia base.css/timeline.js
-  python banner.py otimizar <campanha> [formatos...] [--q 85] comprime assets (originais em _originais/)
-  python banner.py check    <campanha> [formatos...] [--raw] valida peso, duração, clickTag e assets
-  python banner.py zip      <campanha> [formatos...]         gera _entrega/<campanha>_<formato>.zip (só os OK)
-  python banner.py preview  <campanha>                       gera _preview.html com todos os formatos
+Cada formato é independente: tem o próprio index.html, base.css, timeline.js, layout.css e assets/.
+
+  python banner.py novo     <campanha> <formatos...>            cria as pastas dos formatos a partir do template
+  python banner.py clonar   <campanha> <master> [formatos...]   copia index.html/base.css/timeline.js do master
+                                                               (nunca mexe em layout.css nem assets/)
+  python banner.py otimizar <campanha> [formatos...] [--q 85]   comprime assets (originais em _originais/)
+  python banner.py check    <campanha> [formatos...] [--raw]    valida peso, duração, clickTag e assets
+  python banner.py zip      <campanha> [formatos...]            gera _entrega/<campanha>_<formato>.zip (só os OK)
+  python banner.py preview  <campanha>                          gera <campanha>/index.html só com os formatos prontos
 
 Grupos: todos, g200, g150, g50, g60. Sem formatos = todas as pastas WxH da campanha.
-Formatos aceitam texto livre ("300 x 250, 728X90") e formatos novos com limites: 300x600:150:30 (KB:segundos).
+Formatos aceitam texto livre ("300 x 250, 728X90"), variações (480x320v1) e formatos novos
+com limites: 300x600:150:30 (KB:segundos).
+Preview: se existir <campanha>/secoes.txt ("GCOM: 970x250, 300x250" por linha), agrupa por seção.
 Peso: 1 KB = 1000 bytes (conservador). Critério padrão: tamanho do .zip; --raw usa a soma dos arquivos.
 """
 import io
@@ -39,9 +44,13 @@ GRUPOS = {
     'g60': ['160x600', '120x600', '468x60', '120x60', '90x60', '728x90', '300x250'],
 }
 GRUPOS['todos'] = [f for g in GRUPOS.values() for f in g]
+# ordem do index de preview
+ORDEM = ['970x250', '970x150', '970x90', '320x50', '300x250', '1248x250', '480x320', '320x480',
+         '728x90', '468x60', '120x60', '90x60', '160x600', '120x600']
 CODIGO = {'index.html', 'base.css', 'layout.css', 'timeline.js'}
 CDN_OK = ('s0.2mdn.net',)  # bibliotecas servidas pelo ad server (não contam peso)
-RE_FMT = re.compile(r'^\d+x\d+$')
+RE_FMT = re.compile(r'^\d+x\d+(v\d+)?$')
+EXTRA = 'formatos_extra.txt'  # formatos fora da tabela, por campanha: "WxH KB segundos"
 
 
 def sair(msg):
@@ -49,7 +58,17 @@ def sair(msg):
     sys.exit(1)
 
 
-EXTRA = 'formatos_extra.txt'  # formatos fora da tabela, por campanha: "WxH KB segundos"
+def base(fmt):
+    """'480x320v2' -> '480x320'"""
+    return re.match(r'\d+x\d+', fmt).group()
+
+
+def wh(fmt):
+    return base(fmt).split('x')
+
+
+def limites(fmt):
+    return FORMATOS[base(fmt)]
 
 
 def carregar_extras(camp):
@@ -64,10 +83,13 @@ def tokens(nomes):
     return [t for t in re.split(r'[,;\s]+', txt) if t]
 
 
+def pastas(camp):
+    return sorted(p.name for p in camp.iterdir() if p.is_dir() and RE_FMT.match(p.name))
+
+
 def formatos(camp, nomes, criar=False):
     if not nomes:
-        achados = sorted(p.name for p in camp.iterdir() if p.is_dir() and RE_FMT.match(p.name))
-        return achados or sair('nenhuma pasta de formato em ' + str(camp))
+        return pastas(camp) or sair('nenhuma pasta de formato em ' + str(camp))
     lista = []
     for n in tokens(nomes):
         m = re.match(r'^(\d+x\d+):(\d+):(\d+)$', n)  # formato novo com limites: 300x600:150:30
@@ -77,8 +99,8 @@ def formatos(camp, nomes, criar=False):
             with open(camp / EXTRA, 'a', encoding='utf-8') as arq:
                 arq.write(f'{n} {m.group(2)} {m.group(3)}\n')
         for f in GRUPOS.get(n, [n]):
-            if f not in FORMATOS:
-                sair(f'formato fora da tabela: {f} (informe os limites assim: {f}:KB:segundos)')
+            if not RE_FMT.match(f) or base(f) not in FORMATOS:
+                sair(f'formato fora da tabela: {f} (informe os limites assim: {base(f) if RE_FMT.match(f) else f}:KB:segundos)')
             if not criar and not (camp / f).is_dir():
                 sair(f'pasta inexistente: {f}')
             if f not in lista:
@@ -86,26 +108,21 @@ def formatos(camp, nomes, criar=False):
     return lista
 
 
-def wh(fmt):
-    return fmt.split('x')
-
-
-# ---------- novo / sync ----------
+# ---------- novo / clonar ----------
 
 def cmd_novo(camp, nomes):
     fmts = formatos(camp, nomes, criar=True)
-    shared = camp / '_shared'
-    if not shared.exists():
-        shutil.copytree(TEMPLATE / '_shared', shared)
-    modelo = (TEMPLATE / 'layout.css').read_text(encoding='utf-8')
+    criados = []
     for f in fmts:
+        pasta = camp / f
+        (pasta / 'assets').mkdir(parents=True, exist_ok=True)
         w, h = wh(f)
-        (camp / f / 'assets').mkdir(parents=True, exist_ok=True)
-        lay = camp / f / 'layout.css'
-        if not lay.exists():
-            lay.write_text(modelo.replace('{{W}}', w).replace('{{H}}', h), encoding='utf-8')
-    print('criado: ' + ', '.join(fmts))
-    cmd_sync(camp, fmts)
+        for arq in ('index.html', 'base.css', 'timeline.js', 'layout.css'):
+            if not (pasta / arq).exists():
+                txt = (TEMPLATE / 'formato' / arq).read_text(encoding='utf-8')
+                (pasta / arq).write_text(txt.replace('{{W}}', w).replace('{{H}}', h), encoding='utf-8')
+        criados.append(f)
+    print('criado: ' + ', '.join(criados))
 
 
 def omitidos(layout):
@@ -113,24 +130,32 @@ def omitidos(layout):
     return [i.lstrip('#') for i in re.split(r'[\s,]+', m.group(1)) if i] if m else []
 
 
-def cmd_sync(camp, nomes):
-    shared = camp / '_shared'
-    if not shared.is_dir():
-        sair('sem _shared/ — rode "novo" primeiro')
-    base = (shared / 'index.html').read_text(encoding='utf-8')
+def cmd_clonar(camp, master, nomes):
+    if not (camp / master / 'index.html').exists():
+        sair('master sem index.html: ' + master)
+    mw, mh = wh(master)
+    html_m = (camp / master / 'index.html').read_text(encoding='utf-8')
+    alvos = [f for f in formatos(camp, nomes, criar=True) if f != master] if nomes else \
+        [f for f in pastas(camp) if f != master]
     saida = []
-    for f in formatos(camp, nomes):
+    for f in alvos:
+        pasta = camp / f
+        (pasta / 'assets').mkdir(parents=True, exist_ok=True)
         w, h = wh(f)
-        lay = camp / f / 'layout.css'
-        omit = omitidos(lay.read_text(encoding='utf-8')) if lay.exists() else []
-        html = base.replace('{{W}}', w).replace('{{H}}', h)
+        html = re.sub(rf'width={mw},height={mh}', f'width={w},height={h}', html_m)
+        html = re.sub(rf'(<title>[^<]*?){mw}x{mh}', rf'\g<1>{w}x{h}', html)
+        lay = pasta / 'layout.css'
+        if not lay.exists():
+            lay.write_text((TEMPLATE / 'formato' / 'layout.css').read_text(encoding='utf-8')
+                           .replace('{{W}}', w).replace('{{H}}', h), encoding='utf-8')
+        omit = omitidos(lay.read_text(encoding='utf-8'))
         for i in omit:
             html = re.sub(r'^[ \t]*<[^\n]*\bid="' + re.escape(i) + r'"[^\n]*\n', '', html, flags=re.M)
-        (camp / f / 'index.html').write_text(html, encoding='utf-8')
+        (pasta / 'index.html').write_text(html, encoding='utf-8')
         for arq in ('base.css', 'timeline.js'):
-            shutil.copy2(shared / arq, camp / f / arq)
+            shutil.copy2(camp / master / arq, pasta / arq)
         saida.append(f + (f' (omitidos: {", ".join(omit)})' if omit else ''))
-    print('sync: ' + ', '.join(saida))
+    print(f'clonado de {master}: ' + (', '.join(saida) or 'nenhum'))
 
 
 # ---------- otimizar ----------
@@ -222,7 +247,7 @@ def ler(p):
 
 
 def checar(camp, f, usar_raw):
-    peso_max, dur_max = FORMATOS[f]
+    peso_max, dur_max = limites(f)
     pasta = camp / f
     erros, avisos = [], []
     html = ler(pasta / 'index.html')
@@ -252,13 +277,15 @@ def checar(camp, f, usar_raw):
             usados.add(alvo)
             if not alvo.exists():
                 erros.append(f'arquivo não encontrado: {r}')
+            elif pasta.resolve() not in alvo.parents:
+                erros.append(f'arquivo fora da pasta do formato: {r}')
     for a in (pasta / 'assets').glob('*'):
         if a.is_file() and a.resolve() not in usados:
             avisos.append(f'asset não usado (pesa à toa): {a.name}')
     for a in pasta.iterdir():
         if a.is_file() and a.name not in CODIGO:
             avisos.append(f'arquivo extra na raiz: {a.name}')
-    if re.search(r':\s*0px;\s*}', ler(pasta / 'layout.css')):
+    if not pronto(pasta):
         avisos.append('layout.css com width 0px (posições não preenchidas?)')
 
     dur = re.search(r'duracao:\s*([\d.]+)', js)
@@ -272,14 +299,14 @@ def checar(camp, f, usar_raw):
         tempo = f'{d:g}s x{n}={d * n:g}s/{dur_max}s'
         if d > dur_max:
             erros.append(f'ciclo de {d:g}s passa do máximo de {dur_max}s')
-        ids_shared = set(re.findall(r'\bid="([^"]+)"', ler(camp / '_shared' / 'index.html')))
+        ids = set(re.findall(r'\bid="([^"]+)"', html))
         for passo in re.findall(r'\{[^{}]*\bt:[^{}]*\}', js):
             num = lambda k, pad: float((re.search(k + r':\s*([\d.]+)', passo) or [None, pad])[1])
             el = re.search(r"el:\s*'([^']+)'", passo)
             fim = num('t', 0) + num('dur', 0) * num('rep', 1)
             if fim > d + 0.01:
                 erros.append(f'passo termina em {fim:g}s, depois da duracao ({d:g}s)')
-            if el and ids_shared and el.group(1) not in ids_shared:
+            if el and el.group(1) not in ids and el.group(1) not in omitidos(ler(pasta / 'layout.css')):
                 avisos.append(f'passo aponta para #{el.group(1)} inexistente')
 
     raw, zp = tamanhos(pasta)
@@ -325,23 +352,46 @@ def cmd_zip(camp, nomes):
         print(f'{f}: {z.name} {z.stat().st_size / KB:.1f}KB')
 
 
+def pronto(pasta):
+    """Formato construído: tem index.html, layout preenchido e assets."""
+    return ((pasta / 'index.html').exists() and any((pasta / 'assets').glob('*'))
+            and not re.search(r':\s*0px;\s*}', ler(pasta / 'layout.css')))
+
+
+def ordenar(fmts):
+    chave = lambda f: (ORDEM.index(base(f)) if base(f) in ORDEM else len(ORDEM), f)
+    return sorted(fmts, key=chave)
+
+
 def cmd_preview(camp):
-    cards = ''.join(
-        f'<figure><figcaption>{f}</figcaption>'
-        f'<iframe src="{f}/index.html" width="{wh(f)[0]}" height="{wh(f)[1]}" scrolling="no"></iframe></figure>'
-        for f in formatos(camp, []))
-    (camp / '_preview.html').write_text(
-        '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Preview</title><style>'
-        'body{font:14px system-ui;background:#eee;margin:16px}figure{display:inline-block;vertical-align:top;'
-        'margin:0 16px 16px 0}figcaption{margin-bottom:4px;color:#555}iframe{border:0;background:#fff;display:block}'
-        'button{margin-bottom:16px;padding:6px 14px}</style></head><body>'
-        '<button onclick="document.querySelectorAll(\'iframe\').forEach(function(i){i.src=i.src})">Reiniciar</button><br>'
-        + cards + '</body></html>', encoding='utf-8')
-    print('preview: ' + str(camp / '_preview.html'))
+    prontos = [f for f in pastas(camp) if pronto(camp / f)]
+    secoes = []
+    if (camp / 'secoes.txt').exists():
+        for linha in ler(camp / 'secoes.txt').splitlines():
+            if ':' in linha:
+                nome, fs = linha.split(':', 1)
+                secoes.append((nome.strip(), [f for f in tokens([fs]) if f in prontos]))
+    else:
+        secoes.append((camp.name.upper(), ordenar(prontos)))
+    modelo = ler(TEMPLATE / 'preview.html')
+    secao_tpl = re.search(r'<!--SECAO-->(.*?)<!--/SECAO-->', modelo, re.S).group(1)
+    fmt_tpl = re.search(r'<!--FORMATO-->(.*?)<!--/FORMATO-->', modelo, re.S).group(1)
+    blocos = []
+    for nome, fs in secoes:
+        for i, f in enumerate(fs):
+            w, h = wh(f)
+            titulo = secao_tpl.replace('{{SECAO}}', nome) if i == 0 else ''
+            blocos.append(fmt_tpl.replace('{{TITULO_SECAO}}', titulo)
+                          .replace('{{F}}', f).replace('{{W}}', w).replace('{{H}}', h))
+    html = re.sub(r'<!--SECAO-->.*?<!--/SECAO-->\s*', '', modelo, flags=re.S)
+    html = re.sub(r'<!--FORMATO-->.*?<!--/FORMATO-->', lambda m: ''.join(blocos), html, flags=re.S)
+    (camp / 'index.html').write_text(html.replace('{{CAMPANHA}}', camp.name.upper()), encoding='utf-8')
+    total = sum(len(fs) for _, fs in secoes)
+    print(f'preview: index.html com {total} formato(s) pronto(s): ' + ', '.join(dict.fromkeys(f for _, fs in secoes for f in fs)))
 
 
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ('novo', 'sync', 'otimizar', 'check', 'zip', 'preview'):
+    if len(argv) < 2 or argv[0] not in ('novo', 'clonar', 'otimizar', 'check', 'zip', 'preview'):
         print(__doc__)
         sys.exit(1)
     cmd, camp, resto = argv[0], Path(argv[1]).expanduser().resolve(), argv[2:]
@@ -359,8 +409,10 @@ def main(argv):
         cmd_novo(camp, nomes)
     elif not camp.is_dir():
         sair('campanha inexistente: ' + str(camp))
-    elif cmd == 'sync':
-        cmd_sync(camp, nomes)
+    elif cmd == 'clonar':
+        if not nomes:
+            sair('informe o master: clonar <campanha> <master> [formatos...]')
+        cmd_clonar(camp, tokens(nomes[:1])[0], nomes[1:])
     elif cmd == 'otimizar':
         cmd_otimizar(camp, nomes, q)
     elif cmd == 'check':

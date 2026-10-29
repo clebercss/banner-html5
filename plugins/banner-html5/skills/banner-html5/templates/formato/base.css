@@ -1,4 +1,4 @@
-/* base.css — reset, easings e biblioteca de animações. IDÊNTICO em todos os formatos.
+/* base.css — reset, easings e biblioteca de animações. cópia própria de cada formato.
    Posições ficam em layout.css (left/top/width). transform/opacity são reservados às animações. */
 :root {
   --ease-linear: linear;

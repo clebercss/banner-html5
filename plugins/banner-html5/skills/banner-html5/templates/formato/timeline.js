@@ -1,5 +1,5 @@
-/* timeline.js — motor + timeline da campanha. IDÊNTICO em todos os formatos.
-   Edite só em _shared/ e rode `banner.py sync`. Layout por formato fica em layout.css. */
+/* timeline.js — motor + timeline da campanha. cópia própria de cada formato.
+   Cada formato tem a própria cópia; o master é replicado com `banner.py clonar`. */
 (function () {
   'use strict';
 
