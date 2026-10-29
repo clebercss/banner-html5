@@ -9,6 +9,7 @@ Cada formato é independente: tem o próprio index.html, base.css, timeline.js, 
   python banner.py otimizar <campanha> [formatos...] [--q 85]   comprime assets (originais em _originais/)
   python banner.py check    <campanha> [formatos...] [--raw]    valida peso, duração, clickTag e assets
   python banner.py zip      <campanha> [formatos...]            gera _entrega/<campanha>_<formato>.zip (só os OK)
+                                                               e o backup <campanha>_<formato>_backup.jpg (último frame)
   python banner.py preview  <campanha>                          gera <campanha>/index.html só com os formatos prontos
   python banner.py setup                                        confere e instala o que faltar (Pillow, svgo)
 
@@ -23,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -350,7 +352,53 @@ def cmd_zip(camp, nomes):
             for p in sorted((camp / f).rglob('*')):
                 if p.is_file():
                     zf.write(p, p.relative_to(camp / f).as_posix())
-        print(f'{f}: {z.name} {z.stat().st_size / KB:.1f}KB')
+        print(f'{f}: {z.name} {z.stat().st_size / KB:.1f}KB | {backup(camp, f, dest)}')
+
+
+NAVEGADORES = ['chrome', 'google-chrome', 'chromium', 'chromium-browser', 'msedge',
+               r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+               r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+               r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+               r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
+               '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+               '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge']
+
+
+def navegador():
+    for n in NAVEGADORES:
+        c = shutil.which(n) or (n if Path(n).is_file() else None)
+        if c:
+            return c
+
+
+def backup(camp, f, dest):
+    """Último frame do animado em JPG (headless Chrome/Edge com tempo virtual além do fim da animação)."""
+    nav = navegador()
+    if not nav:
+        return 'backup pulado (instale Chrome ou Edge)'
+    w, h = map(int, wh(f))
+    png = dest / f'_{f}.png'
+    from PIL import Image, ImageStat
+    im = None
+    for _ in range(3):  # às vezes o headless captura antes de carregar: tela lisa = tenta de novo
+        with tempfile.TemporaryDirectory() as perfil:
+            subprocess.run([nav, '--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio',
+                            f'--user-data-dir={perfil}', f'--window-size={w},{h}', '--virtual-time-budget=32000',
+                            f'--screenshot={png}', (camp / f / 'index.html').as_uri()], capture_output=True, timeout=120)
+        if png.exists():
+            im = Image.open(png).convert('RGB').crop((0, 0, w, h))
+            png.unlink()
+            if max(ImageStat.Stat(im).stddev) > 2:
+                break
+            im = None
+    if im is None:
+        return 'backup FALHOU (confira o animado no navegador)'
+    jpg = dest / f'{camp.name}_{f}_backup.jpg'
+    for q in (90, 85, 80, 75, 70, 60, 50):
+        im.save(jpg, quality=q, optimize=True, progressive=True)
+        if jpg.stat().st_size <= limites(f)[0] * KB:
+            break
+    return f'{jpg.name} {jpg.stat().st_size / KB:.1f}KB'
 
 
 def pronto(pasta):

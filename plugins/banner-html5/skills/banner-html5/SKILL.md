@@ -62,7 +62,7 @@ Delegue **uma única** chamada Agent (`subagent_type: banner-html5:banner-adapta
 Não repasse o briefing inteiro: o subagente não mexe na timeline. Confira apenas o resumo que ele devolver.
 
 ## 4. Entrega
-`$B check <campanha>` → `$B zip <campanha>` → `$B preview <campanha>`. Informe ao usuário a tabela do check, a pasta `_entrega/` e o `index.html` de preview.
+`$B check <campanha>` → `$B zip <campanha>` → `$B preview <campanha>`. O `zip` também gera o backup do último frame de cada formato (`_entrega/<campanha>_<formato>_backup.jpg`, via Chrome/Edge headless). Informe ao usuário a tabela do check, os zips e backups em `_entrega/` e o `index.html` de preview.
 Se o usuário informar seções de mídia (ex.: GCOM, UAC, AFILIADOS), grave `secoes.txt` na campanha (`GCOM: 970x250, 970x150, 300x250`, uma seção por linha) antes do preview.
 
 ## Economia de tokens (siga sempre)
