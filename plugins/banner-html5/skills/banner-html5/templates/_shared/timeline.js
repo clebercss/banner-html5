@@ -63,6 +63,7 @@
         el.style.animation = 'none';
         void el.offsetWidth;          // força reinício
         el.style.animation = mapa[id].join(', ') || 'none';
+        el.style.visibility = mapa[id].length ? '' : 'hidden';  // só tinha passos de loop
       });
       if (!ultimo) setTimeout(ciclo, TIMELINE.duracao * 1000);
     }

@@ -14,6 +14,13 @@ Ferramenta: `B="python <dir>/scripts/banner.py"`, em que `<dir>` é o diretório
 - Todo elemento visual fica em `<formato>/assets/` como arquivo separado, **inclusive SVG**. Só vale inline/data URI se o formato continuar acima do peso depois do `otimizar`, e nesse caso avise o usuário.
 - Arquitetura (não mude): `_shared/` tem `index.html`, `base.css` e `timeline.js`, iguais em todos os formatos. Cada formato tem só `layout.css` e `assets/`. Detalhes em `references/timeline.md`.
 
+## 0. Pasta de destino (obrigatório, antes de qualquer arquivo)
+Toda campanha precisa ser salva numa pasta local escolhida pelo usuário. Nunca salve numa pasta temporária ou de sessão.
+- Se a ferramenta `request_directory` existir, chame-a **sem path** (ela abre o seletor de pastas) e depois `change_directory` com a pasta devolvida. Até o fim do turno, use o caminho absoluto.
+- Se ela não existir, pergunte o caminho da pasta na mesma mensagem em que pedir o link.
+- Se a sessão já estiver numa pasta escolhida pelo usuário para esta campanha, use essa pasta e não pergunte de novo.
+- A campanha fica em `<pasta>/<nome-curto>/` (por exemplo `cabore`). No Windows, prefira caminhos curtos (limite de 260 caracteres).
+
 ## 1. Briefing (no máximo 2 rodadas)
 1. Se o link ou o card não veio no argumento, peça **só isso**, em uma linha, lembrando o usuário de enviar o link com `node-id` (ver `references/figma.md`).
 2. Leia a campanha da forma mais barata (`references/figma.md`) e faça **uma única** chamada AskUserQuestion com 4 perguntas:
