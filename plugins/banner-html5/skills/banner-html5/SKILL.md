@@ -23,8 +23,13 @@ Toda campanha precisa ser salva numa pasta local escolhida pelo usuário. Nunca 
 
 ## 1. Briefing (no máximo 2 rodadas)
 1. Se o link ou o card não veio no argumento, peça **só isso**, em uma linha, lembrando o usuário de enviar o link com `node-id` (ver `references/figma.md`).
-2. Leia a campanha da forma mais barata (`references/figma.md`) e faça **uma única** chamada AskUserQuestion com 4 perguntas:
-   - **Formatos** (multiSelect): `1248x250`, `Grupo 150KB` (970x250, 970x150, 970x90, 320x480, 480x320), `320x50`, `Grupo 60KB` (160x600, 120x600, 468x60, 120x60, 90x60, 728x90, 300x250). Em "Other", o usuário digita uma lista avulsa.
+2. **Formatos**: uma chamada AskUserQuestion com 4 perguntas multiSelect que, juntas, listam os 14 formatos **um a um** (nunca agrupados). Cada opção tem como label o formato e como descrição o peso e a duração. Avise na pergunta 1 que as quatro perguntas formam uma lista só, e que as que não tiverem formato desejado podem ficar em branco ou receber "Other: nenhum".
+   - Formatos (1/4): `1248x250` (200KB · 15s), `970x250`, `970x150`, `970x90` (150KB · 30s)
+   - Formatos (2/4): `320x480`, `480x320` (150KB · 30s), `320x50` (50KB · 30s), `300x250` (60KB · 30s)
+   - Formatos (3/4): `728x90`, `468x60`, `160x600`, `120x600` (60KB · 30s)
+   - Formatos (4/4): `120x60`, `90x60` (60KB · 30s)
+   Essa chamada não depende do Figma: faça-a logo depois do passo 0, enquanto lê a campanha.
+3. Leia a campanha da forma mais barata (`references/figma.md`) e faça **uma única** chamada AskUserQuestion com 3 perguntas:
    - **Mood**: 3 opções deduzidas da campanha (presets em `references/timeline.md`).
    - **Animações por frame**: 2 ou 3 propostas concretas baseadas na campanha (ex.: "F1 texto entra-esq out 0.5s · F2 produto pop back · CTA pulso"), com a primeira marcada como (Recomendado).
    - **Observações**: "Nenhuma" / "Tenho observações" (o usuário escreve em Other).
