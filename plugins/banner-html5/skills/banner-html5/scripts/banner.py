@@ -9,6 +9,7 @@
   python banner.py preview  <campanha>                       gera _preview.html com todos os formatos
 
 Grupos: todos, g200, g150, g50, g60. Sem formatos = todas as pastas WxH da campanha.
+Formatos aceitam texto livre ("300 x 250, 728X90") e formatos novos com limites: 300x600:150:30 (KB:segundos).
 Peso: 1 KB = 1000 bytes (conservador). Critério padrão: tamanho do .zip; --raw usa a soma dos arquivos.
 """
 import io
@@ -48,15 +49,36 @@ def sair(msg):
     sys.exit(1)
 
 
+EXTRA = 'formatos_extra.txt'  # formatos fora da tabela, por campanha: "WxH KB segundos"
+
+
+def carregar_extras(camp):
+    for linha in (camp / EXTRA).read_text(encoding='utf-8').splitlines() if (camp / EXTRA).exists() else []:
+        f, kb, s = linha.split()
+        FORMATOS[f] = (int(kb), int(s))
+
+
+def tokens(nomes):
+    """Aceita formatos digitados livremente: '300 x 250, 728X90 320×50' -> ['300x250', '728x90', '320x50']."""
+    txt = re.sub(r'(\d)\s*[xX×]\s*(\d)', r'\1x\2', ' '.join(nomes))
+    return [t for t in re.split(r'[,;\s]+', txt) if t]
+
+
 def formatos(camp, nomes, criar=False):
     if not nomes:
         achados = sorted(p.name for p in camp.iterdir() if p.is_dir() and RE_FMT.match(p.name))
         return achados or sair('nenhuma pasta de formato em ' + str(camp))
     lista = []
-    for n in nomes:
+    for n in tokens(nomes):
+        m = re.match(r'^(\d+x\d+):(\d+):(\d+)$', n)  # formato novo com limites: 300x600:150:30
+        if m:
+            n = m.group(1)
+            FORMATOS[n] = (int(m.group(2)), int(m.group(3)))
+            with open(camp / EXTRA, 'a', encoding='utf-8') as arq:
+                arq.write(f'{n} {m.group(2)} {m.group(3)}\n')
         for f in GRUPOS.get(n, [n]):
             if f not in FORMATOS:
-                sair(f'formato fora da tabela: {f}')
+                sair(f'formato fora da tabela: {f} (informe os limites assim: {f}:KB:segundos)')
             if not criar and not (camp / f).is_dir():
                 sair(f'pasta inexistente: {f}')
             if f not in lista:
@@ -330,6 +352,8 @@ def main(argv):
         q = int(resto[i + 1])
         del resto[i:i + 2]
     nomes = [r for r in resto if not r.startswith('--')]
+    if camp.is_dir():
+        carregar_extras(camp)
     if cmd == 'novo':
         camp.mkdir(parents=True, exist_ok=True)
         cmd_novo(camp, nomes)

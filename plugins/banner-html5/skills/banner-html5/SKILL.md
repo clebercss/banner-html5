@@ -28,7 +28,9 @@ Toda campanha precisa ser salva numa pasta local escolhida pelo usuário. Nunca 
    - Formatos (2/4): `320x480`, `480x320` (150KB · 30s), `320x50` (50KB · 30s), `300x250` (60KB · 30s)
    - Formatos (3/4): `728x90`, `468x60`, `160x600`, `120x600` (60KB · 30s)
    - Formatos (4/4): `120x60`, `90x60` (60KB · 30s)
-   Essa chamada não depende do Figma: faça-a logo depois do passo 0, enquanto lê a campanha.
+   **Campo aberto:** todas as perguntas têm o campo "Other". Escreva no texto da pergunta 1: *"Prefere digitar? Use 'Other' em qualquer pergunta e escreva os formatos separados por vírgula (ex.: 300x250, 728x90, 320x50)."*
+   Junte os formatos marcados com os digitados, normalize (`300 x 250`, `300X250` e `300×250` viram `300x250`) e tire os repetidos. Se algum formato digitado não estiver na tabela, avise e pergunte o peso e a duração dele antes de seguir; depois passe-o ao `novo` como `WxH:KB:segundos` (ex.: `300x600:150:30`). O script já normaliza texto livre e guarda os formatos novos em `formatos_extra.txt`.
+   Essa chamada não depende do Figma: faça-a logo depois do passo 0, antes de ler a campanha.
 3. Leia a campanha da forma mais barata (`references/figma.md`) e faça **uma única** chamada AskUserQuestion com 3 perguntas:
    - **Mood**: 3 opções deduzidas da campanha (presets em `references/timeline.md`).
    - **Animações por frame**: 2 ou 3 propostas concretas baseadas na campanha (ex.: "F1 texto entra-esq out 0.5s · F2 produto pop back · CTA pulso"), com a primeira marcada como (Recomendado).
