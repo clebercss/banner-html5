@@ -6,14 +6,8 @@ O plugin instala:
 - a skill `/banner-html5`, com template, timeline compartilhada, scripts e references;
 - o subagente `banner-adaptador`, que roda em Sonnet com esforço baixo e adapta o master para os outros formatos.
 
-## 1. Dependências (uma vez por máquina)
-```bash
-python -m pip install pillow
-```
-```bash
-npm i -g svgo
-```
-Requer Python 3.8+ e Node.js. O pngquant é opcional e reduz mais o peso dos PNG (baixe em pngquant.org e coloque no PATH).
+## 1. Dependências
+Precisa ter **Python 3.8+** e **Node.js** instalados. O Pillow e o svgo a skill instala sozinha no primeiro uso (`banner.py setup`). O pngquant é opcional e reduz mais o peso dos PNG (baixe em pngquant.org e coloque no PATH).
 
 ## 2. Instalar o plugin
 ```bash

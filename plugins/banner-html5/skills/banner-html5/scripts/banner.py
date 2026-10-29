@@ -10,6 +10,7 @@ Cada formato é independente: tem o próprio index.html, base.css, timeline.js, 
   python banner.py check    <campanha> [formatos...] [--raw]    valida peso, duração, clickTag e assets
   python banner.py zip      <campanha> [formatos...]            gera _entrega/<campanha>_<formato>.zip (só os OK)
   python banner.py preview  <campanha>                          gera <campanha>/index.html só com os formatos prontos
+  python banner.py setup                                        confere e instala o que faltar (Pillow, svgo)
 
 Grupos: todos, g200, g150, g50, g60. Sem formatos = todas as pastas WxH da campanha.
 Formatos aceitam texto livre ("300 x 250, 728X90"), variações (480x320v1) e formatos novos
@@ -390,7 +391,30 @@ def cmd_preview(camp):
     print(f'preview: index.html com {total} formato(s) pronto(s): ' + ', '.join(dict.fromkeys(f for _, fs in secoes for f in fs)))
 
 
+def cmd_setup():
+    """Instala só o que falta. Rápido quando já está tudo instalado."""
+    st = []
+    try:
+        import PIL  # noqa: F401
+        st.append('pillow OK')
+    except ImportError:
+        r = subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'pillow'], capture_output=True, text=True)
+        st.append('pillow instalado' if r.returncode == 0 else 'pillow FALHOU (rode: python -m pip install pillow)')
+    if shutil.which('svgo'):
+        st.append('svgo OK')
+    elif shutil.which('npm'):
+        r = subprocess.run([shutil.which('npm'), 'i', '-g', 'svgo'], capture_output=True, text=True)
+        st.append('svgo instalado' if r.returncode == 0 else 'svgo FALHOU (rode: npm i -g svgo)')
+    else:
+        st.append('svgo ausente: instale o Node.js (nodejs.org) e rode npm i -g svgo')
+    if not shutil.which('pngquant'):
+        st.append('pngquant opcional ausente (pngquant.org)')
+    print('setup: ' + ' | '.join(st))
+
+
 def main(argv):
+    if argv[:1] == ['setup']:
+        return cmd_setup()
     if len(argv) < 2 or argv[0] not in ('novo', 'clonar', 'otimizar', 'check', 'zip', 'preview'):
         print(__doc__)
         sys.exit(1)

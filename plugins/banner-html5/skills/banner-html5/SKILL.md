@@ -15,7 +15,10 @@ Ferramenta: `B="python <dir>/scripts/banner.py"`, em que `<dir>` é o diretório
 - **Cada formato é independente**: a pasta `<WxH>/` tem os próprios `index.html`, `base.css`, `timeline.js`, `layout.css` e `assets/`. Nunca crie pasta compartilhada nem referencie arquivos fora da pasta do formato (o `check` acusa). Detalhes em `references/timeline.md`.
 - Preview: o `index.html` na raiz da campanha (modelo em `templates/preview.html`) mostra **só os formatos já prontos**. Regere com `$B preview` sempre que um formato ficar pronto.
 
-## 0. Pasta de destino (obrigatório, antes de qualquer arquivo)
+## 0. Preparação (obrigatório, antes de qualquer arquivo)
+Rode `$B setup` uma vez no início da sessão. Ele instala sozinho o que faltar (Pillow e svgo) e responde em uma linha. Se algo falhar, repasse a linha ao usuário e siga: o `otimizar` funciona com menos compressão.
+
+**Pasta de destino:**
 Toda campanha precisa ser salva numa pasta local escolhida pelo usuário. Nunca salve numa pasta temporária ou de sessão.
 - Se a ferramenta `request_directory` existir, chame-a **sem path** (ela abre o seletor de pastas) e depois `change_directory` com a pasta devolvida. Até o fim do turno, use o caminho absoluto.
 - Se ela não existir, pergunte o caminho da pasta na mesma mensagem em que pedir o link.
