@@ -6,7 +6,8 @@ Cada formato é independente: tem o próprio index.html, base.css, timeline.js, 
   python banner.py novo     <campanha> <formatos...>            cria as pastas dos formatos a partir do template
   python banner.py clonar   <campanha> <master> [formatos...]   copia index.html/base.css/timeline.js do master
                                                                (nunca mexe em layout.css nem assets/)
-  python banner.py otimizar <campanha> [formatos...] [--q 85]   comprime assets (originais em _originais/)
+  python banner.py otimizar <campanha> [formatos...] [--q 85]   só se o formato passar do peso: comprime os assets
+                                                               maiores até caber (originais em _originais/)
   python banner.py check    <campanha> [formatos...] [--raw]    valida peso, duração, clickTag e assets
   python banner.py zip      <campanha> [formatos...]            gera _entrega/<campanha>_<formato>.zip (só os OK)
                                                                e o backup <campanha>_<formato>_backup.jpg (último frame)
@@ -170,38 +171,42 @@ def minify_svg(txt):
     return txt.strip()
 
 
-def otimizar_arquivo(src, dst, q, ferr):
+def otimizar_arquivo(src, dst, q, ferr, forte=False):
+    """Comprime src em dst. forte=True é a segunda rodada: PNG em paleta de 256 cores e JPG com q menor."""
     ext = src.suffix.lower()
     tmp = dst.with_name(dst.name + '.tmp')
     try:
         if ext == '.png' and ferr['pngquant']:
-            r = subprocess.run([ferr['pngquant'], '--quality=70-95', '--speed', '1', '--strip', '--force',
-                                '--output', str(tmp), str(src)], capture_output=True)
+            r = subprocess.run([ferr['pngquant'], '--quality=' + ('50-80' if forte else '70-95'), '--speed', '1',
+                                '--strip', '--force', '--output', str(tmp), str(src)], capture_output=True)
             if r.returncode != 0:
                 shutil.copy2(src, tmp)
             if ferr['oxipng']:
                 subprocess.run([ferr['oxipng'], '-o', '4', '--strip', 'safe', '-q', str(tmp)], capture_output=True)
+        elif ext == '.png' and ferr['pil'] and forte:
+            im = ferr['pil'].open(src).convert('RGBA')
+            im.quantize(256, method=2, dither=1).save(tmp, 'PNG', optimize=True)  # FASTOCTREE, Floyd-Steinberg
         elif ext == '.png' and ferr['pil']:
             ferr['pil'].open(src).save(tmp, 'PNG', optimize=True)
         elif ext in ('.jpg', '.jpeg') and ferr['pil']:
-            ferr['pil'].open(src).convert('RGB').save(tmp, 'JPEG', quality=q, optimize=True, progressive=True)
+            ferr['pil'].open(src).convert('RGB').save(tmp, 'JPEG', quality=q - (15 if forte else 0),
+                                                      optimize=True, progressive=True)
         elif ext == '.svg' and ferr['svgo']:
             subprocess.run([ferr['svgo'], '-i', str(src), '-o', str(tmp), '--multipass', '-q'], capture_output=True)
         elif ext == '.svg':
             tmp.write_text(minify_svg(src.read_text(encoding='utf-8')), encoding='utf-8')
         else:
-            shutil.copy2(src, dst)
             return
-        if not tmp.exists() or tmp.stat().st_size >= src.stat().st_size:
-            shutil.copy2(src, dst)  # não compensou: mantém o original
-        else:
-            shutil.copy2(tmp, dst)
+        if tmp.exists() and tmp.stat().st_size < dst.stat().st_size:
+            shutil.copy2(tmp, dst)  # só troca se ficou menor que o atual
     finally:
         if tmp.exists():
             tmp.unlink()
 
 
 def cmd_otimizar(camp, nomes, q):
+    """Só comprime formato acima do peso: parte dos originais e comprime do maior asset ao menor,
+    parando assim que o zip cabe no limite. Formato dentro do peso fica com os assets originais."""
     try:
         from PIL import Image as pil
     except ImportError:
@@ -210,18 +215,32 @@ def cmd_otimizar(camp, nomes, q):
             'svgo': shutil.which('svgo'), 'pil': pil}
     for f in formatos(camp, nomes):
         orig = camp / '_originais' / f
-        antes = depois = 0
-        for a in sorted((camp / f / 'assets').glob('*')):
-            if not a.is_file():
-                continue
+        assets = [a for a in (camp / f / 'assets').glob('*') if a.is_file()]
+        for a in assets:
             bkp = orig / a.name
             if not bkp.exists() or bkp.stat().st_mtime < a.stat().st_mtime - 1:
                 orig.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(a, bkp)  # sempre comprime a partir do original (sem perda acumulada)
-            antes += bkp.stat().st_size
-            otimizar_arquivo(bkp, a, q, ferr)
-            depois += a.stat().st_size
-        print(f'{f}: assets {antes / KB:.1f}KB -> {depois / KB:.1f}KB')
+                shutil.copy2(a, bkp)  # asset novo ou trocado vira o original
+            else:
+                shutil.copy2(bkp, a)  # sempre recomeça do original (sem perda acumulada)
+        lim = limites(f)[0] * KB
+        antes = tamanhos(camp / f)[1]
+        if antes <= lim:
+            print(f'{f}: {antes / KB:.1f}/{lim / KB:.0f}KB dentro do peso, assets originais (sem compressão)')
+            continue
+        peso, mexidos = antes, []
+        for forte in (False, True):
+            for a in sorted(assets, key=lambda a: a.stat().st_size, reverse=True):
+                if peso <= lim:
+                    break
+                tam = a.stat().st_size
+                otimizar_arquivo(orig / a.name, a, q, ferr, forte)
+                if a.stat().st_size < tam:
+                    peso = tamanhos(camp / f)[1]
+                    if a.name not in mexidos:
+                        mexidos.append(a.name)
+        st = 'OK' if peso <= lim else 'AINDA ACIMA'
+        print(f'{f}: {antes / KB:.1f} -> {peso / KB:.1f}/{lim / KB:.0f}KB {st} | comprimidos: {", ".join(mexidos) or "nenhum"}')
     falta = []
     if not ferr['pngquant'] and not pil:
         falta.append('PNG: instale pngquant ou "pip install pillow"')
@@ -380,9 +399,9 @@ def backup(camp, f, dest):
     png = dest / f'_{f}.png'
     from PIL import Image, ImageStat
     im = None
-    for _ in range(3):  # às vezes o headless captura antes de carregar: tela lisa = tenta de novo
+    for _ in range(5):  # às vezes o headless captura antes de carregar: tela lisa = tenta de novo
         with tempfile.TemporaryDirectory() as perfil:
-            subprocess.run([nav, '--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio',
+            subprocess.run([nav, '--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--run-all-compositor-stages-before-draw',
                             f'--user-data-dir={perfil}', f'--window-size={w},{h}', '--virtual-time-budget=32000',
                             f'--screenshot={png}', (camp / f / 'index.html').as_uri()], capture_output=True, timeout=120)
         if png.exists():
@@ -394,7 +413,7 @@ def backup(camp, f, dest):
     if im is None:
         return 'backup FALHOU (confira o animado no navegador)'
     jpg = dest / f'{camp.name}_{f}_backup.jpg'
-    for q in (90, 85, 80, 75, 70, 60, 50):
+    for q in (100, 95, 90, 85, 80, 75, 70, 60, 50):  # só baixa a qualidade se passar do peso
         im.save(jpg, quality=q, optimize=True, progressive=True)
         if jpg.stat().st_size <= limites(f)[0] * KB:
             break

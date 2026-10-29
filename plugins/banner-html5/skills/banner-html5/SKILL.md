@@ -46,7 +46,7 @@ Toda campanha precisa ser salva numa pasta local escolhida pelo usuário. Nunca 
 3. Coloque os assets do master em `<master>/assets/`, usando os mesmos nomes de arquivo que valerão para todos os formatos.
 4. Edite `<master>/index.html`: um `<img class="el">` por linha, com ids que descrevem o elemento (`f1-titulo`, `produto`, `cta`).
 5. Edite `<master>/timeline.js` (só o bloco TIMELINE) e `<master>/layout.css`.
-6. Rode `$B otimizar <campanha> <master>`, depois `$B check <campanha> <master>`.
+6. Rode `$B otimizar <campanha> <master>`, depois `$B check <campanha> <master>`. O `otimizar` só comprime se o formato passar do peso máximo: dentro do limite, os assets ficam originais. Acima, ele comprime do maior asset ao menor e para assim que cabe. Não comprima imagens por conta própria.
 7. Rode `$B preview <campanha>` (o index mostra só o master) e peça a aprovação antes de adaptar os outros formatos.
 
 ## 3. Adaptação dos outros formatos → subagente `banner-adaptador`

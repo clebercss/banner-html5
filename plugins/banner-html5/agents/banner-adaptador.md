@@ -21,7 +21,7 @@ Ferramenta: use o comando `B` (caminho absoluto do banner.py) que vier no prompt
 3. Escreva o `layout.css` do formato: mesmos seletores do master, valores exatos em px. Ajuste `--dist` (40 grande, 24 faixa/torre, 12 mini). Se um id não existe no frame, coloque-o em `omitir:` no comentário do topo e apague a regra dele.
 4. Coloque os assets em `<formato>/assets/` com **os mesmos nomes** do master (copie da pasta indicada ou use `download_assets`).
 5. Se marcou algum `omitir:`, rode `$B clonar <campanha> <master> <formato>` de novo para tirar o elemento do index. Depois rode `$B otimizar <campanha> <formatos>`, depois `$B check <campanha> <formatos>`.
-6. Se o check acusar excesso de peso: reexporte a foto mais pesada (`--q 75` no otimizar, ou resolução 1x). Inline/data URI só como último recurso, e diga isso no resumo.
+6. O `otimizar` só comprime formato acima do peso (do maior asset ao menor, até caber). Não comprima imagens por conta própria. Se o check ainda acusar excesso: reexporte a foto mais pesada (`--q 75` no otimizar, ou resolução 1x). Inline/data URI só como último recurso, e diga isso no resumo.
 
 6b. Ao final, rode `$B preview <campanha>` (o index de preview passa a incluir os formatos prontos).
 
