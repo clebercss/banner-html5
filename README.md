@@ -31,3 +31,6 @@ Edite os arquivos, aumente o número de `version` em `plugins/banner-html5/.clau
 ```bash
 claude plugin marketplace update banners-html5
 ```
+
+## Validação (H5 Validator / CM360)
+Depois do `zip`, a skill roda `banner.py validar <campanha>`. Ele confere cada .zip de `_entrega/`, inclusive zips de lote, com as regras do Campaign Manager 360: index.html na raiz, clickTag declarado e usado, ad.size, tipos de arquivo aceitos, no máximo 100 arquivos e 10MB, nada de `%` no nome, sem localStorage/sessionStorage/indexedDB, arquivos referenciados presentes, URLs fixas e arquivos não usados. O veredito oficial continua sendo o https://h5validator.appspot.com/dcm.

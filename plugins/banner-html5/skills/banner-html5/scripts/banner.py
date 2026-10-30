@@ -11,6 +11,8 @@ Cada formato é independente: tem o próprio index.html, base.css, timeline.js, 
   python banner.py check    <campanha> [formatos...] [--raw]    valida peso, duração, clickTag e assets
   python banner.py zip      <campanha> [formatos...]            gera _entrega/<campanha>_<formato>.zip (só os OK)
                                                                e o backup <campanha>_<formato>_backup.jpg (último frame)
+  python banner.py validar  <campanha> [formatos...]            valida os zips de _entrega/ (qualquer nome, lote incluso)
+                                                               pelas regras do H5 Validator (CM360)
   python banner.py preview  <campanha>                          gera <campanha>/index.html só com os formatos prontos
   python banner.py setup                                        confere e instala o que faltar (Pillow, svgo)
 
@@ -420,6 +422,117 @@ def backup(camp, f, dest):
     return f'{jpg.name} {jpg.stat().st_size / KB:.1f}KB'
 
 
+# ---------- validar (regras do H5 Validator / Campaign Manager 360, aplicadas ao .zip final) ----------
+# Fonte: support.google.com/campaignmanager/answer/3145300
+DCM_TIPOS = {'.html', '.htm', '.js', '.css', '.jpg', '.jpeg', '.gif', '.png', '.json', '.xml', '.svg',
+             '.eot', '.otf', '.ttf', '.woff', '.woff2'}
+DCM_MAX_ARQ, DCM_MAX_MB = 100, 10
+DCM_STORAGE = re.compile(r'\b(localStorage|sessionStorage|indexedDB|openDatabase)\b')
+TEXTO = ('.html', '.htm', '.css', '.js', '.json', '.xml', '.svg')
+
+
+def validar_zip(z, tam, f):
+    """z: caminho ou BytesIO do zip de um criativo; f: formato (WxH) ou None se o nome não indicar."""
+    erros, avisos = [], []
+    with zipfile.ZipFile(z) as zf:
+        nomes = [n for n in zf.namelist() if not n.endswith('/')]
+        txt = {n: zf.read(n).decode('utf-8', 'replace') for n in nomes if Path(n).suffix.lower() in TEXTO}
+    if 'index.html' not in nomes:
+        erros.append('index.html não está na raiz do zip')
+    if len([n for n in nomes if Path(n).suffix.lower() in ('.html', '.htm')]) > 1:
+        avisos.append('mais de um HTML no zip (o CM360 usa só o principal)')
+    if len(nomes) > DCM_MAX_ARQ:
+        erros.append(f'{len(nomes)} arquivos (máximo {DCM_MAX_ARQ})')
+    if tam > DCM_MAX_MB * 1000 * KB:
+        erros.append(f'zip acima de {DCM_MAX_MB}MB')
+    for n in nomes:
+        ext = Path(n).suffix.lower()
+        if ext == '.zip':
+            erros.append(f'zip dentro do zip: {n}')
+        elif ext not in DCM_TIPOS:
+            erros.append(f'tipo de arquivo não aceito: {n}')
+        if '%' in n:
+            erros.append(f'"%" no nome do arquivo: {n}')
+        elif not re.fullmatch(r'[\w./-]+', n, re.A):
+            avisos.append(f'nome com espaço, acento ou caractere especial: {n}')
+        if 'backup' in n.lower() and ext in ('.jpg', '.jpeg', '.png', '.gif'):
+            avisos.append(f'backup dentro do zip (no CM360 o backup vai à parte): {n}')
+
+    html = txt.get('index.html', '')
+    if not re.search(r'clickTag\s*=', html):
+        erros.append('clickTag não declarado no index.html')
+    elif not re.search(r'(window\.open|location(\.href)?\s*=|href=)[^;]*clickTag', html):
+        erros.append('clickTag declarado mas não usado como destino do clique')
+    decl = re.search(r'clickTag\s*=\s*["\']([^"\']*)', html)
+    if decl and '#' in decl.group(1):
+        avisos.append('URL do clickTag com "#" (precisa do padrão de string dividida do CM360)')
+    meta = re.search(r'name="ad\.size"\s+content="width=(\d+),\s*height=(\d+)"', html)
+    if not meta:
+        avisos.append('meta ad.size ausente')
+    elif f and list(meta.groups()) != wh(f):
+        erros.append(f'ad.size {meta[1]}x{meta[2]} diferente do formato {f}')
+
+    usados = set()
+    for n, t in txt.items():
+        api = DCM_STORAGE.search(t)
+        if api:
+            erros.append(f'API de armazenamento proibida ({api[1]}) em {n}')
+        sem_click = re.sub(r'clickTag\s*=\s*["\'][^"\']*["\']', '', t)
+        for u in sorted(set(re.findall(r'https?://[^\s"\'()<>]+', sem_click))):
+            if 'w3.org/' in u or any(c in u for c in CDN_OK):
+                continue  # namespace de SVG/XHTML e bibliotecas do ad server não são problema
+            (erros if u.startswith('http:') else avisos).append(f'URL fixa em {n}: {u}')
+        pai = Path(n).parent
+        refs = re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)', t) + re.findall(r'url\(\s*[\'"]?([^\'")]+)', t)
+        for r in refs:
+            if r.startswith(('data:', 'javascript:', '#', 'http:', 'https:', '//')):
+                continue
+            alvo = re.sub(r'(^|/)\./', r'\1', (pai / r.split('?')[0].split('#')[0]).as_posix())
+            usados.add(alvo)
+            if alvo not in nomes:
+                erros.append(f'arquivo referenciado não está no zip: {r} ({n})')
+    for n in nomes:
+        if n not in usados and n != 'index.html' and Path(n).suffix.lower() not in ('.html', '.htm', '.js', '.css'):
+            avisos.append(f'arquivo não referenciado (o CM360 pede só o que o HTML usa): {n}')
+
+    if f and base(f) in FORMATOS and tam > limites(f)[0] * KB:
+        erros.append(f'peso {tam / KB:.1f}KB acima de {limites(f)[0]}KB do formato')
+    return erros, list(dict.fromkeys(avisos)), len(nomes)
+
+
+def cmd_validar(camp, nomes):
+    """Valida todo .zip de _entrega/, com qualquer nome. O formato vem do WxH no nome do arquivo.
+    Zip de lote (com outros .zip dentro, como aceita o CM360) tem cada criativo validado."""
+    dest = camp / '_entrega'
+    alvo = set(formatos(camp, nomes)) if nomes else None
+    criativos = []
+    for z in sorted(dest.glob('*.zip')) if dest.is_dir() else []:
+        with zipfile.ZipFile(z) as zf:
+            internos = [n for n in zf.namelist() if n.lower().endswith('.zip')]
+            if internos and 'index.html' not in zf.namelist():
+                criativos += [(f'{z.name} > {n}', io.BytesIO(zf.read(n)), zf.getinfo(n).file_size) for n in internos]
+                continue
+        criativos.append((z.name, z, z.stat().st_size))
+    total = ok = 0
+    for nome, z, tam in criativos:
+        m = re.findall(r'(?<!\d)(\d+x\d+(?:v\d+)?)(?!\d)', nome.rsplit('>', 1)[-1])
+        f = m[-1] if m else None
+        if alvo is not None and f not in alvo:
+            continue
+        total += 1
+        erros, avisos, n = validar_zip(z, tam, f)
+        ok += not erros
+        print(f'{"OK  " if not erros else "ERRO"} {nome}  {tam / KB:.1f}KB, {n} arquivos'
+              + (f' | {len(avisos)} aviso(s)' if avisos else ''))
+        for e in erros:
+            print('  x ' + e)
+        for a in avisos:
+            print('  ! ' + a)
+    if not total:
+        sair('nenhum zip em _entrega/ (rode zip antes)')
+    print(f'{ok}/{total} OK pelas regras do H5 Validator/CM360 (veredito oficial: h5validator.appspot.com/dcm)')
+    return ok == total
+
 def pronto(pasta):
     """Formato construído: tem index.html, layout preenchido e assets."""
     return ((pasta / 'index.html').exists() and any((pasta / 'assets').glob('*'))
@@ -482,7 +595,7 @@ def cmd_setup():
 def main(argv):
     if argv[:1] == ['setup']:
         return cmd_setup()
-    if len(argv) < 2 or argv[0] not in ('novo', 'clonar', 'otimizar', 'check', 'zip', 'preview'):
+    if len(argv) < 2 or argv[0] not in ('novo', 'clonar', 'otimizar', 'check', 'zip', 'validar', 'preview'):
         print(__doc__)
         sys.exit(1)
     cmd, camp, resto = argv[0], Path(argv[1]).expanduser().resolve(), argv[2:]
@@ -510,6 +623,8 @@ def main(argv):
         sys.exit(0 if cmd_check(camp, nomes, usar_raw) else 1)
     elif cmd == 'zip':
         cmd_zip(camp, nomes)
+    elif cmd == 'validar':
+        sys.exit(0 if cmd_validar(camp, nomes) else 1)
     elif cmd == 'preview':
         cmd_preview(camp)
 
