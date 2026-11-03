@@ -6,7 +6,8 @@
   /* ===== TIMELINE DA CAMPANHA (editar aqui) =====
      t: início (s) · el: id do elemento · anim: keyframe de base.css · dur: duração (s)
      ease: in | out | inout | back | linear (padrão inout) · rep: repetições (ex.: pulso)
-     loop: true = só roda se houver próximo ciclo (saída do frame final antes de reiniciar) */
+     loop: true = só roda se houver próximo ciclo (saída do frame final antes de reiniciar)
+     fim: true = só roda no último ciclo (frame final que encerra o animado) */
   var TIMELINE = {
     duracao: 10,   // segundos de um ciclo
     loops: 3,      // ciclos desejados; o motor corta para caber no limite do formato
@@ -42,6 +43,7 @@
     TIMELINE.passos.forEach(function (p) {
       porEl[p.el] = porEl[p.el] || [];
       if (p.loop && ultimo) return;
+      if (p.fim && !ultimo) return;  // fim: true = só no último ciclo (frame final)
       var fill = p.fill || (SAIDA.test(p.anim) ? 'forwards'
         : ENTRADA.test(p.anim) ? (entrou[p.el] ? 'forwards' : 'both') : 'none');
       if (ENTRADA.test(p.anim)) entrou[p.el] = true;

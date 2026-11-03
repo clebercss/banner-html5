@@ -17,6 +17,8 @@ O master é construído primeiro. `clonar` copia `index.html`, `base.css` e `tim
 `{ t: 3.6, el: 'f2-txt', anim: 'entra-baixo', dur: 0.6, ease: 'out', rep: 1, loop: false }`
 - `ease`: `in`, `out`, `inout` (padrão), `back` (passa do ponto e volta), `linear`.
 - `loop: true` faz o passo rodar só quando ainda há outro ciclo. Use para a saída do frame final, assim no último ciclo o CTA fica parado na tela.
+- `fim: true` faz o passo rodar só no último ciclo. Use para um frame final que encerra o animado (ex.: uma assinatura que só aparece perto dos 30s). Elemento que só tem passos `fim` fica escondido nos outros ciclos.
+- `fill` (opcional) força o preenchimento da animação. Keyframes próprios da campanha que não começam com `entra-`, `fade-in`, `pop`, `zoom-`, `revela-`, `gira-` ou `ken-burns` precisam dele: `both` na primeira entrada do elemento e `forwards` nas demais e nas saídas.
 - Um elemento sem passos fica visível o tempo todo. Um elemento com entrada fica escondido até ela começar.
 - Um passo não pode terminar depois de `duracao` (o check valida).
 
