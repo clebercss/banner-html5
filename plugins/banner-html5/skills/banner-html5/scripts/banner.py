@@ -11,6 +11,9 @@ Cada formato é independente: tem o próprio index.html, base.css, timeline.js, 
   python banner.py check    <campanha> [formatos...] [--raw]    valida peso, duração, clickTag e assets
   python banner.py zip      <campanha> [formatos...]            gera _entrega/<campanha>_<formato>.zip (só os OK)
                                                                e o backup <campanha>_<formato>_backup.jpg (último frame)
+            [--nome cliente_card] [--versao v2] [--data MMAA]  nomeia zip e backup com o mesmo nome:
+                                                               cliente_card_<formato>[_versao]-MMAA (.zip / .jpg);
+                                                               MMAA = mês e ano atuais se omitido; guardado em entrega.txt
   python banner.py validar  <campanha> [formatos...]            valida os zips de _entrega/ (qualquer nome, lote incluso)
                                                                pelas regras do H5 Validator (CM360)
   python banner.py preview  <campanha>                          gera <campanha>/index.html só com os formatos prontos
@@ -22,12 +25,14 @@ com limites: 300x600:150:30 (KB:segundos).
 Preview: se existir <campanha>/secoes.txt ("GCOM: 970x250, 300x250" por linha), agrupa por seção.
 Peso: 1 KB = 1000 bytes (conservador). Critério padrão: tamanho do .zip; --raw usa a soma dos arquivos.
 """
+import datetime
 import io
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -360,20 +365,60 @@ def cmd_check(camp, nomes, usar_raw):
 
 # ---------- zip / preview ----------
 
-def cmd_zip(camp, nomes):
+def limpar_nome(t):
+    """Nome de arquivo seguro para o CM360: sem acento, espaço vira hífen, só [A-Za-z0-9_-]."""
+    t = unicodedata.normalize('NFKD', t).encode('ascii', 'ignore').decode()
+    t = re.sub(r'\s+', '-', t.strip())
+    return re.sub(r'[^A-Za-z0-9_-]', '', t).strip('_-')
+
+
+def nomes_entrega(camp, nome=None, versao=None, data=None):
+    """Padrão de nome da entrega (cliente_card + versão + MMAA). Lido/gravado em <campanha>/entrega.txt."""
+    arq = camp / 'entrega.txt'
+    cfg = {}
+    if arq.is_file():
+        for linha in arq.read_text(encoding='utf-8').splitlines():
+            if ':' in linha:
+                k, v = linha.split(':', 1)
+                cfg[k.strip()] = v.strip()
+    for k, v in (('nome', nome), ('versao', versao), ('data', data)):
+        if v is not None:
+            cfg[k] = v
+    if not cfg.get('nome'):
+        return None
+    cfg['nome'] = limpar_nome(cfg['nome'])
+    cfg['versao'] = limpar_nome(cfg.get('versao', ''))
+    if not cfg.get('data'):
+        cfg['data'] = datetime.date.today().strftime('%m%y')
+    if not re.fullmatch(r'\d{4}', cfg['data']):
+        sair('--data deve ser MMAA (ex.: 1126)')
+    arq.write_text(''.join(f'{k}: {cfg[k]}\n' for k in ('nome', 'versao', 'data')), encoding='utf-8')
+    return cfg
+
+
+def nome_arquivo(camp, f, cfg):
+    if not cfg:
+        return f'{camp.name}_{f}', f'{camp.name}_{f}_backup'
+    base = f"{cfg['nome']}_{f}" + (f"_{cfg['versao']}" if cfg['versao'] else '') + f"-{cfg['data']}"
+    return base, base
+
+
+def cmd_zip(camp, nomes, nome=None, versao=None, data=None):
     dest = camp / '_entrega'
     dest.mkdir(exist_ok=True)
+    cfg = nomes_entrega(camp, nome, versao, data)
     for f in formatos(camp, nomes):
         ok, _, _ = checar(camp, f, False)
         if not ok:
             print(f'{f}: pulado (rode check)')
             continue
-        z = dest / f'{camp.name}_{f}.zip'
+        base, bk = nome_arquivo(camp, f, cfg)
+        z = dest / f'{base}.zip'
         with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
             for p in sorted((camp / f).rglob('*')):
                 if p.is_file():
                     zf.write(p, p.relative_to(camp / f).as_posix())
-        print(f'{f}: {z.name} {z.stat().st_size / KB:.1f}KB | {backup(camp, f, dest)}')
+        print(f'{f}: {z.name} {z.stat().st_size / KB:.1f}KB | {backup(camp, f, dest, bk)}')
 
 
 NAVEGADORES = ['chrome', 'google-chrome', 'chromium', 'chromium-browser', 'msedge',
@@ -392,7 +437,7 @@ def navegador():
             return c
 
 
-def backup(camp, f, dest):
+def backup(camp, f, dest, nome=None):
     """Último frame do animado em JPG (headless Chrome/Edge com tempo virtual além do fim da animação)."""
     nav = navegador()
     if not nav:
@@ -414,7 +459,7 @@ def backup(camp, f, dest):
             im = None
     if im is None:
         return 'backup FALHOU (confira o animado no navegador)'
-    jpg = dest / f'{camp.name}_{f}_backup.jpg'
+    jpg = dest / f'{nome or camp.name + "_" + f + "_backup"}.jpg'
     for q in (100, 95, 90, 85, 80, 75, 70, 60, 50):  # só baixa a qualidade se passar do peso
         im.save(jpg, quality=q, optimize=True, progressive=True)
         if jpg.stat().st_size <= limites(f)[0] * KB:
@@ -600,6 +645,14 @@ def main(argv):
         sys.exit(1)
     cmd, camp, resto = argv[0], Path(argv[1]).expanduser().resolve(), argv[2:]
     usar_raw = '--raw' in resto
+    opc = {}
+    for k in ('--nome', '--versao', '--data'):
+        if k in resto:
+            i = resto.index(k)
+            if i + 1 >= len(resto):
+                sair(f'{k} precisa de um valor')
+            opc[k[2:]] = resto[i + 1]
+            del resto[i:i + 2]
     q = 85
     if '--q' in resto:
         i = resto.index('--q')
@@ -622,7 +675,7 @@ def main(argv):
     elif cmd == 'check':
         sys.exit(0 if cmd_check(camp, nomes, usar_raw) else 1)
     elif cmd == 'zip':
-        cmd_zip(camp, nomes)
+        cmd_zip(camp, nomes, **opc)
     elif cmd == 'validar':
         sys.exit(0 if cmd_validar(camp, nomes) else 1)
     elif cmd == 'preview':
